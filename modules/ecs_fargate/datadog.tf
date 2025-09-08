@@ -436,11 +436,14 @@ locals {
         volumesFrom    = []
         logConfiguration = try(var.dd_log_collection.cloudwatch_logging != null, false) ? {
           logDriver = "awslogs"
-          options = {
-            "awslogs-group"         = var.dd_log_collection.cloudwatch_logging.log_group_name
-            "awslogs-region"        = data.aws_region.current.name
-            "awslogs-stream-prefix" = var.dd_log_collection.cloudwatch_logging.log_stream_prefix
-          }
+          options = merge(
+            {
+              "awslogs-group"         = var.dd_log_collection.cloudwatch_logging.log_group_name
+              "awslogs-region"        = data.aws_region.current.name
+              "awslogs-stream-prefix" = var.dd_log_collection.cloudwatch_logging.log_stream_prefix
+            },
+            var.dd_log_collection.cloudwatch_logging.auto_create_group ? { "awslogs-create-group" = "true" } : {}
+          )
         } : null
         dependsOn = local.has_extra_config ? [
           {

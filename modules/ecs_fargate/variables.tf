@@ -198,15 +198,13 @@ variable "dd_log_collection" {
         retries      = optional(number)
         start_period = optional(number)
         timeout      = optional(number)
-        }),
-        {
-          command      = ["CMD-SHELL", "exit 0"]
-          interval     = 5
-          retries      = 3
-          start_period = 15
-          timeout      = 5
-        }
-      )
+        }), {
+        command      = ["CMD-SHELL", "exit 0"]
+        interval     = 5
+        retries      = 3
+        start_period = 15
+        timeout      = 5
+      })
       firelens_options = optional(object({
         config_file_type  = optional(string)
         config_file_value = optional(string)
@@ -224,6 +222,7 @@ variable "dd_log_collection" {
     cloudwatch_logging = optional(object({
       log_group_name    = string
       log_stream_prefix = optional(string, "fluentbit")
+      auto_create_group = optional(bool, true)
     }))
   })
   default = {
