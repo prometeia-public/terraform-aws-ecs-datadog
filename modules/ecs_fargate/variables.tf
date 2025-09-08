@@ -224,6 +224,10 @@ variable "dd_log_collection" {
         }
       )
       extra_configurations = optional(list(map(any)), [])
+      cloudwatch_logging = optional(object({
+        log_group_name = string
+        log_stream_prefix = optional(string, "fluentbit")
+      }))
       }),
       {
         fluentbit_config = {
