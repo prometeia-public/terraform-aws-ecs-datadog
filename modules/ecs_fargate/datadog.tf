@@ -409,8 +409,14 @@ locals {
             try(var.dd_log_collection.fluentbit_config.firelens_options.config_file_value != null, false) ? { config-file-value = var.dd_log_collection.fluentbit_config.firelens_options.config_file_value } : {}
           )
         }
-        #command = local.has_extra_config ? ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf", "-c", "/shared-config/extra.conf"] : null
-        command          = local.has_extra_config ? ["-c", "/shared-config/extra.conf"] : null
+        entryPoint = local.has_extra_config ? [
+          "/fluent-bit/bin/fluent-bit",
+          "-e", "/fluent-bit/firehose.so",
+          "-e", "/fluent-bit/cloudwatch.so",
+          "-e", "/fluent-bit/kinesis.so",
+          "-c", "/fluent-bit/etc/fluent-bit.conf",
+          "-c", "/shared-config/extra.conf"
+        ] : null
         cpu              = var.dd_log_collection.fluentbit_config.cpu
         memory_limit_mib = var.dd_log_collection.fluentbit_config.memory_limit_mib
         user             = "0"
