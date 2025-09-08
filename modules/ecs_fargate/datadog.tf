@@ -434,12 +434,12 @@ locals {
         portMappings   = []
         systemControls = []
         volumesFrom    = []
-        logConfiguration = try(var.dd_log_collection.fluentbit_config.cloudwatch_logging != null, false) ? {
+        logConfiguration = try(var.dd_log_collection.cloudwatch_logging != null, false) ? {
           logDriver = "awslogs"
           options = {
-            "awslogs-group"         = var.dd_log_collection.fluentbit_config.cloudwatch_logging.log_group_name
+            "awslogs-group"         = var.dd_log_collection.cloudwatch_logging.log_group_name
             "awslogs-region"        = data.aws_region.current.name
-            "awslogs-stream-prefix" = var.dd_log_collection.fluentbit_config.cloudwatch_logging.log_stream_prefix
+            "awslogs-stream-prefix" = var.dd_log_collection.cloudwatch_logging.log_stream_prefix
           }
         } : null
         dependsOn = local.has_extra_config ? [

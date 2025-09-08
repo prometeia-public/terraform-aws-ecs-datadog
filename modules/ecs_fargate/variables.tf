@@ -218,27 +218,13 @@ variable "dd_log_collection" {
         service_name  = optional(string)
         source_name   = optional(string)
         message_key   = optional(string)
-        }),
-        {
-          host_endpoint = "http-intake.logs.datadoghq.com"
-        }
-      )
-      extra_configurations = optional(list(map(any)), [])
-      cloudwatch_logging = optional(object({
-        log_group_name = string
-        log_stream_prefix = optional(string, "fluentbit")
       }))
-      }),
-      {
-        fluentbit_config = {
-          registry      = "public.ecr.aws/aws-observability/aws-for-fluent-bit"
-          image_version = "stable"
-          log_driver_configuration = {
-            host_endpoint = "http-intake.logs.datadoghq.com"
-          }
-        }
-      }
-    )
+      extra_configurations = optional(list(map(any)), [])
+    }))
+    cloudwatch_logging = optional(object({
+      log_group_name    = string
+      log_stream_prefix = optional(string, "fluentbit")
+    }))
   })
   default = {
     enabled = false
