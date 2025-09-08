@@ -223,6 +223,7 @@ variable "dd_log_collection" {
           host_endpoint = "http-intake.logs.datadoghq.com"
         }
       )
+      extra_configurations = optional(list(map(any)), [])
       }),
       {
         fluentbit_config = {

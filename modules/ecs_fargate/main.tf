@@ -14,6 +14,7 @@ resource "aws_ecs_task_definition" "this" {
       local.dd_agent_container,
       local.dd_log_container,
       local.dd_cws_container,
+      local.dd_fluentbit_config_container,
       [for k, v in local.modified_container_definitions : v],
     )
   )

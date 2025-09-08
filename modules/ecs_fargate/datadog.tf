@@ -22,6 +22,7 @@ locals {
 
   is_linux               = var.runtime_platform == null || try(var.runtime_platform.operating_system_family == null, true) || try(var.runtime_platform.operating_system_family == "LINUX", true)
   is_fluentbit_supported = var.dd_log_collection.enabled && local.is_linux
+  has_extra_config       = local.is_fluentbit_supported && length(try(var.dd_log_collection.fluentbit_config.extra_configurations, [])) > 0
 
   # Datadog Firelens log configuration
   dd_firelens_log_configuration = local.is_fluentbit_supported ? merge(
@@ -155,6 +156,16 @@ locals {
     }
   ] : []
 
+  # Create mount points for containers based on INPUT configurations
+  container_input_mounts = {
+    for input in local.input_configs : "${input.container_name}-${substr(sha256(input.container_path), 0, 8)}" => {
+      sourceVolume   = "${input.container_name}-logs-${substr(sha256(input.container_path), 0, 8)}"
+      containerPath  = input.container_path
+      readOnly       = false
+      container_name = input.container_name
+    }
+  }
+
   modified_container_definitions = [
     for container in jsondecode(var.container_definitions) : merge(
       container,
@@ -174,6 +185,10 @@ locals {
           lookup(container, "mountPoints", []),
           local.apm_dsd_mount,
           local.is_cws_supported && lookup(container, "entryPoint", []) != [] ? local.cws_mount : [],
+          [
+            for mount_key, mount_config in local.container_input_mounts :
+            mount_config if mount_config.container_name == container.name
+          ],
         )
         dependsOn = concat(
           lookup(container, "dependsOn", []),
@@ -219,10 +234,18 @@ locals {
     }
   ] : []
 
+  fluentbit_config_volume = local.has_extra_config ? [
+    {
+      name = "fluentbit-config-volume"
+    }
+  ] : []
+
   modified_volumes = concat(
     [for k, v in coalesce(var.volumes, []) : v],
     local.apm_dsd_volume,
     local.cws_volume,
+    local.fluentbit_config_volume,
+    local.input_volumes,
   )
 
   # Datadog Agent container environment variables
@@ -345,6 +368,28 @@ locals {
     local.dd_log_environment
   )
 
+  # Extract INPUT configurations for volume creation
+  input_configs = local.has_extra_config ? [
+    for config in var.dd_log_collection.fluentbit_config.extra_configurations : config if lookup(config, "INPUT", null) != null && lookup(config, "container_name", null) != null
+  ] : []
+
+  # Create volumes for INPUT configurations
+  input_volumes = [
+    for input in local.input_configs : {
+      name = "${input.container_name}-logs-${substr(sha256(input.container_path), 0, 8)}"
+    }
+  ]
+
+  # FluentBit extra configuration template
+  fluentbit_extra_config = local.has_extra_config ? join("\n", flatten([
+    for config in var.dd_log_collection.fluentbit_config.extra_configurations : [
+      for k, v in config : [
+        "[${k}]",
+        [for cfg_k, cfg_v in v : "    ${cfg_k} ${cfg_v}"]
+      ] if k == "INPUT" || k == "OUTPUT" || k == "FILTER"
+    ]
+  ])) : ""
+
   # Datadog log router container definition
   dd_log_container = local.is_fluentbit_supported ? [
     merge(
@@ -362,14 +407,37 @@ locals {
             try(var.dd_log_collection.fluentbit_config.firelens_options.config_file_value != null, false) ? { config-file-value = var.dd_log_collection.fluentbit_config.firelens_options.config_file_value } : {}
           )
         }
+        #command = local.has_extra_config ? ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf", "-c", "/shared-config/extra.conf"] : null
+        command          = local.has_extra_config ? ["-c", "/shared-config/extra.conf"] : null
         cpu              = var.dd_log_collection.fluentbit_config.cpu
         memory_limit_mib = var.dd_log_collection.fluentbit_config.memory_limit_mib
         user             = "0"
-        mountPoints      = []
-        environment      = local.dd_log_agent_env
-        portMappings     = []
-        systemControls   = []
-        volumesFrom      = []
+        mountPoints = concat(
+          local.has_extra_config ? [
+            {
+              sourceVolume  = "fluentbit-config-volume"
+              containerPath = "/shared-config"
+              readOnly      = true
+            }
+          ] : [],
+          [
+            for input in local.input_configs : {
+              sourceVolume  = "${input.container_name}-logs-${substr(sha256(input.container_path), 0, 8)}"
+              containerPath = lookup(input, "fluentbit_path", input.container_path)
+              readOnly      = true
+            }
+          ]
+        )
+        environment    = local.dd_log_agent_env
+        portMappings   = []
+        systemControls = []
+        volumesFrom    = []
+        dependsOn = local.has_extra_config ? [
+          {
+            containerName = "fluentbit-config-init"
+            condition     = "SUCCESS"
+          }
+        ] : []
       },
       var.dd_log_collection.fluentbit_config.log_router_health_check.command == null ? {} : {
         healthCheck = {
@@ -399,6 +467,27 @@ locals {
       portMappings     = []
       systemControls   = []
       volumesFrom      = []
+    }
+  ] : []
+
+  # FluentBit config init container
+  dd_fluentbit_config_container = local.has_extra_config ? [
+    {
+      name      = "fluentbit-config-init"
+      image     = "busybox:latest"
+      essential = false
+      command   = ["/bin/sh", "-c", "echo '${local.fluentbit_extra_config}' > /shared-config/extra.conf"]
+      mountPoints = [
+        {
+          sourceVolume  = "fluentbit-config-volume"
+          containerPath = "/shared-config"
+          readOnly      = false
+        }
+      ]
+      environment    = []
+      portMappings   = []
+      systemControls = []
+      volumesFrom    = []
     }
   ] : []
 }
